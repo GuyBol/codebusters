@@ -19,9 +19,6 @@ STUN_EFFECT = 10
 
 def distance(a, b):
     return math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2)
-
-def randomPosition():
-    return Position(random.randint(0,MAX_X), random.randint(0,MAX_Y))
  
 ''' Class representing a position '''
 class Position:
@@ -35,13 +32,14 @@ class Position:
  
 ''' Buster '''
 class Buster:       
-    def __init__(self, position, idn, hasGhost):
+    def __init__(self, world, position, idn, hasGhost):
         self.pos = position
         self.idn = idn
         self.hasGhost = hasGhost
         self.command = None
-        self.defaultTarget = randomPosition()
+        self.defaultTarget = world.randomPosition()
         self.stunRest = 0
+        self.world = world
        
     def setCommand(self, entity, d):
         # If it's a ghost, try to capture it
@@ -58,7 +56,7 @@ class Buster:
     
     def getDefaultCommand(self):
         if distance(self.pos, self.defaultTarget) <= MOVE_DISTANCE:
-            self.defaultTarget = randomPosition()
+            self.defaultTarget = self.world.randomPosition()
         return 'MOVE ' + str(self.defaultTarget.x) + ' ' + str(self.defaultTarget.y)
  
  
@@ -96,7 +94,7 @@ class World:
                 currentBuster.command = None
                 currentBuster.stunRest -= 1
             else:
-                buster = Buster(position, entity_id, state==1)
+                buster = Buster(self, position, entity_id, state==1)
                 self.myBusters.append(buster)
         # Ghost
         elif entity_type == -1:
@@ -104,8 +102,25 @@ class World:
             self.ghosts.append(ghost)
         # Enemy buster
         else:
-            buster = Buster(position, entity_id, state==1)
+            buster = Buster(self, position, entity_id, state==1)
             self.enemyBusters.append(buster)
+    
+    def randomPosition(self):
+        # To reach a corner, the coordinates need to be divided by sqrt(2)
+        minDistance = int(FOG_RANGE / math.sqrt(2))
+        # Choose a corner randomly (except base), or any random point
+        corner = random.randint(0,3)
+        if corner == 0:
+            if self.myTeamId == 0:
+                return Position(MAX_X - minDistance, MAX_Y - minDistance)
+            else:
+                return Position(minDistance, minDistance)
+        elif corner == 1:
+            return Position(minDistance, MAX_Y - minDistance)
+        elif corner == 2:
+            return Position(MAX_X - minDistance, minDistance)
+        else:
+            return Position(random.randint(0,MAX_X), random.randint(0,MAX_Y))
            
     def findClosestBuster(self, ghost):
         m = 10000000000
