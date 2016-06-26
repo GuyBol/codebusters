@@ -13,7 +13,7 @@ MAX_GHOST_CARRY = 1
 BASE_RANGE = 1600
  
  
- 
+
 def distance(a, b):
     return math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2)
 
