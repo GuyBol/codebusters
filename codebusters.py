@@ -9,8 +9,11 @@ FOG_RANGE = 2200
 MOVE_DISTANCE = 800
 TRAP_RANGE_MIN = 900
 TRAP_RANGE_MAX = 1760
+STUN_RANGE = 1760
 MAX_GHOST_CARRY = 1
 BASE_RANGE = 1600
+STUN_REST = 20
+STUN_EFFECT = 10
  
  
 
@@ -31,26 +34,27 @@ class Position:
  
  
 ''' Buster '''
-class Buster:
-    def __init__(self, position, idn):
-        self.pos = position
-        self.idn = idn
-        self.hasGhost = False
-        self.command = None
-        self.defaultTarget = randomPostion()
-       
+class Buster:       
     def __init__(self, position, idn, hasGhost):
         self.pos = position
         self.idn = idn
         self.hasGhost = hasGhost
         self.command = None
         self.defaultTarget = randomPosition()
+        self.stunRest = 0
        
-    def setCommand(self, ghost, d):
-        if d > TRAP_RANGE_MAX:
-            self.command = 'MOVE ' + str(ghost.pos.x) + ' ' + str(ghost.pos.y)
-        elif d > TRAP_RANGE_MIN:
-            self.command = 'BUST ' + str(ghost.idn)
+    def setCommand(self, entity, d):
+        # If it's a ghost, try to capture it
+        if isinstance(entity, Ghost):
+            if d > TRAP_RANGE_MAX:
+                self.command = 'MOVE ' + str(entity.pos.x) + ' ' + str(entity.pos.y)
+            elif d > TRAP_RANGE_MIN:
+                self.command = 'BUST ' + str(entity.idn)
+        # If it's an enemy, stun it
+        elif isinstance(entity, Buster):
+            if d <= STUN_RANGE and self.stunRest < 0:
+                self.command = 'STUN ' + str(entity.idn)
+                self.stunRest = STUN_REST
     
     def getDefaultCommand(self):
         if distance(self.pos, self.defaultTarget) <= MOVE_DISTANCE:
@@ -90,6 +94,7 @@ class World:
                 currentBuster.pos = position
                 currentBuster.hasGhost = state==1
                 currentBuster.command = None
+                currentBuster.stunRest -= 1
             else:
                 buster = Buster(position, entity_id, state==1)
                 self.myBusters.append(buster)
@@ -98,6 +103,7 @@ class World:
             ghost = Ghost(position, entity_id)
             self.ghosts.append(ghost)
         # Enemy buster
+        else:
             buster = Buster(position, entity_id, state==1)
             self.enemyBusters.append(buster)
            
@@ -127,11 +133,15 @@ class World:
                     buster.command = 'RELEASE'
                 else:
                     buster.command = 'MOVE ' + str(self.getBase().x) + ' ' + str(self.getBase().y)
+        # Try to capture a ghost
         for ghost in self.ghosts:
             self.findClosestBuster(ghost)
+        # Try to stun an enemy
+        for enemy in self.enemyBusters:
+            self.findClosestBuster(enemy)
            
 # Send your busters out into the fog to trap ghosts and bring them home!
- 
+
 busters_per_player = int(raw_input())  # the amount of busters you control
 ghost_count = int(raw_input())  # the amount of ghosts on the map
 my_team_id = int(raw_input())  # if this is 0, your base is on the top left of the map, if it is one, on the bottom right
