@@ -39,6 +39,7 @@ class Buster:
         self.command = None
         self.defaultTarget = world.randomPosition()
         self.stunRest = 0
+        self.stunned = 0
         self.world = world
        
     def setCommand(self, entity, d):
@@ -50,14 +51,31 @@ class Buster:
                 self.command = 'BUST ' + str(entity.idn)
         # If it's an enemy, stun it
         elif isinstance(entity, Buster):
-            if d <= STUN_RANGE and self.stunRest < 0:
+            if d <= STUN_RANGE and self.stunRest <= 0 and entity.stunned <= 0:
                 self.command = 'STUN ' + str(entity.idn)
                 self.stunRest = STUN_REST
+                entity.stunned = STUN_EFFECT
     
     def getDefaultCommand(self):
         if distance(self.pos, self.defaultTarget) <= MOVE_DISTANCE:
             self.defaultTarget = self.world.randomPosition()
         return 'MOVE ' + str(self.defaultTarget.x) + ' ' + str(self.defaultTarget.y)
+        
+    def findClosestEntity(self, entities):
+        m = 10000000000
+        entityRef = None
+        for entity in entities:
+            d = distance(self.pos, entity.pos)
+            if  d < m:
+                m = d
+                entityRef = entity
+        return entityRef, m
+    
+    def updateStunCounter(self):
+        if self.stunRest > 0:
+            self.stunRest -= 1
+        if self.stunned > 0:
+            self.stunned -= 1
  
  
 ''' Ghost '''
@@ -77,33 +95,35 @@ class World:
    
     def clean(self):
         #self.myBusters = []
-        self.enemyBusters = []
+        #self.enemyBusters = []
         self.ghosts = []
+    
+    def updateBusters(self, busters, idn, position, state):
+        currentBuster = None
+        for busterIter in busters:
+            if busterIter.idn == idn:
+                currentBuster = busterIter
+        if currentBuster:
+            currentBuster.pos = position
+            currentBuster.hasGhost = state==1
+            currentBuster.command = None
+            currentBuster.updateStunCounter()
+        else:
+            buster = Buster(self, position, entity_id, state==1)
+            busters.append(buster)
    
     def addEntity(self, entity_id, x, y, entity_type, state, value):
         position = Position(x, y)
         # One of my busters (update if already exists)
         if entity_type == self.myTeamId:
-            currentBuster = None
-            for busterIter in self.myBusters:
-                if busterIter.idn == entity_id:
-                    currentBuster = busterIter
-            if currentBuster:
-                currentBuster.pos = position
-                currentBuster.hasGhost = state==1
-                currentBuster.command = None
-                currentBuster.stunRest -= 1
-            else:
-                buster = Buster(self, position, entity_id, state==1)
-                self.myBusters.append(buster)
+            self.updateBusters(self.myBusters, entity_id, position, state)
         # Ghost
         elif entity_type == -1:
             ghost = Ghost(position, entity_id)
             self.ghosts.append(ghost)
         # Enemy buster
         else:
-            buster = Buster(self, position, entity_id, state==1)
-            self.enemyBusters.append(buster)
+            self.updateBusters(self.enemyBusters, entity_id, position, state)
     
     def randomPosition(self):
         # To reach a corner, the coordinates need to be divided by sqrt(2)
@@ -148,12 +168,20 @@ class World:
                     buster.command = 'RELEASE'
                 else:
                     buster.command = 'MOVE ' + str(self.getBase().x) + ' ' + str(self.getBase().y)
-        # Try to capture a ghost
-        for ghost in self.ghosts:
-            self.findClosestBuster(ghost)
         # Try to stun an enemy
-        for enemy in self.enemyBusters:
-            self.findClosestBuster(enemy)
+        for buster in self.myBusters:
+            enemy, dist = buster.findClosestEntity(self.enemyBusters)
+            buster.setCommand(enemy, dist)
+        # Try to capture a ghost
+        for buster in self.myBusters:
+            if not buster.command:
+                ghost, dist = buster.findClosestEntity(self.ghosts)
+                if ghost:
+                    buster.setCommand(ghost, dist)
+        # Else just move
+        for buster in self.myBusters:
+            if not buster.command:
+                buster.command = buster.getDefaultCommand()
            
 # Send your busters out into the fog to trap ghosts and bring them home!
 
